@@ -70,15 +70,16 @@ def process_audio(audio, original_rate):
 def main():
     model = joblib.load(MODEL_PATH)
     p = pyaudio.PyAudio()
+    buffer_ready = False  # Track buffer status
 
     try:
         # check arch, if rpi, then use get_audio_device, 
         # else use get_h6_device
-        # if 'rpi' in os.uname().machine:
-        #     device_index, hw_rate = get_audio_device()
-        # else:
-        #     device_index, hw_rate = get_h6_device(p)
-        device_index, hw_rate = get_audio_device()
+        if 'rpi' in os.uname().machine:
+            device_index, hw_rate = get_audio_device()
+        else:
+            device_index, hw_rate = get_h6_device(p)
+        # device_index, hw_rate = get_audio_device()
         
         print(f"Using device index {device_index} at {hw_rate}Hz")
 
@@ -106,6 +107,11 @@ def main():
                 data = stream.read(CHUNK, exception_on_overflow=False)
                 new_samples = np.frombuffer(data, dtype=np.int16)
                 audio_buffer = np.concatenate((audio_buffer, new_samples))
+
+                # Check buffer status
+                if not buffer_ready and len(audio_buffer) >= buffer_size:
+                    print("Buffer filled! Starting detection...")
+                    buffer_ready = True
 
                 # Process when we have enough samples
                 while len(audio_buffer) >= buffer_size:
