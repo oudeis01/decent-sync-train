@@ -75,7 +75,7 @@ def main():
     try:
         # check arch, if rpi, then use get_audio_device, 
         # else use get_h6_device
-        if 'rpi' in os.uname().machine:
+        if 'aarch64' in os.uname().machine:
             device_index, hw_rate = get_audio_device()
         else:
             device_index, hw_rate = get_h6_device(p)
