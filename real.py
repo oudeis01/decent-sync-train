@@ -5,6 +5,7 @@ import joblib
 import time
 import os
 from scipy import signal
+from pythonosc import udp_client
 
 # Configuration
 MODEL_PATH = "wooden_hit_model.pkl"
@@ -17,6 +18,9 @@ THRESHOLD = 0.70
 N_FFT = 512
 HOP_LENGTH = 256
 MEL_FILTERS = librosa.filters.mel(sr=TARGET_SAMPLE_RATE, n_fft=N_FFT, n_mels=40, fmax=4000)
+
+# OSC client
+client = udp_client.SimpleUDPClient("127.0.0.1", 9000)
 
 def get_audio_device():
     """Find USB audio interface with direct ALSA access"""
@@ -45,6 +49,7 @@ def process_audio(audio, original_rate):
     return np.mean(mfccs.T, axis=0)
 
 def main():
+    global client
     model = joblib.load(MODEL_PATH)
     p = pyaudio.PyAudio()
     stream = None
@@ -84,6 +89,7 @@ def main():
                 
                 if prob > THRESHOLD:
                     print(f"Detected! ({time.time()-last_print:.2f}s since last)")
+                    client.send_message("/rotate", 3000, 50, 0)
                     print(prob)
                     last_print = time.time()
                 
@@ -96,6 +102,7 @@ def main():
         p.terminate()
 
 if __name__ == "__main__":
+    
     # Performance optimizations
     os.environ['LIBROSA_CACHE_LEVEL'] = '50'
     os.sched_setaffinity(0, {0})  # Lock to CPU core 0
