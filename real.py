@@ -89,7 +89,7 @@ def main():
                 
                 if prob > THRESHOLD:
                     print(f"Detected! ({time.time()-last_print:.2f}s since last)")
-                    client.send_message("/rotate", 3000, 50, 0)
+                    client.send_message("/rotate", [3000, 50, 0])
                     print(prob)
                     last_print = time.time()
                 
