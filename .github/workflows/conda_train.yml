@@ -1,4 +1,4 @@
-name: Train Model with Conda
+name: Train Model
 
 on:
   workflow_dispatch:
@@ -17,27 +17,20 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    - name: Set up Miniconda
-      uses: conda-incubator/setup-miniconda@v3
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v4
       with:
         python-version: ${{ matrix.python-version }}
-        channels: conda-forge,defaults
-        channel-priority: strict
 
-    - name: Install dependencies
-      shell: bash -el {0}
+    - name: Install system dependencies
+      run: sudo apt-get install -y libsndfile1 wget unzip
+
+    - name: Install Python packages
       run: |
-        conda install -n base -c conda-forge \
-          librosa \
-          scikit-learn \
-          joblib \
-          numpy \
-          soundfile \
-          wget \
-          unzip
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
 
-    - name: Handle training data
-      shell: bash -el {0}
+    - name: Download and prepare data
       run: |
         mkdir -p training_data
         wget --no-check-certificate "https://drive.google.com/uc?export=download&id=1L0B8QAY5DmNs6G9rgzXGvpkQ0ZhGzCuU" -O dataset.zip
@@ -46,13 +39,11 @@ jobs:
         mkdir -p training_data/noise/cut
         mv training_data/noise/* training_data/noise/cut/ || true
 
-    - name: Execute training
-      shell: bash -el {0}
-      run: |
-        python train_model.py
+    - name: Run training
+      run: python train_model.py
 
-    - name: Archive model
-      uses: actions/upload-artifact@v4  # Updated to v4
+    - name: Upload model
+      uses: actions/upload-artifact@v4
       with:
         name: wooden-model-py${{ matrix.python-version }}
         path: wooden_hit_model.pkl
