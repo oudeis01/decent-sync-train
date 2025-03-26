@@ -1,0 +1,59 @@
+name: Train Model with Conda
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+jobs:
+  train:
+    name: Train (${{ matrix.python-version }})
+    runs-on: ubuntu-latest  # Single OS for audio processing consistency
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.8", "3.9", "3.10", "3.11"]
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Miniconda
+      uses: conda-incubator/setup-miniconda@v3
+      with:
+        python-version: ${{ matrix.python-version }}
+        channels: conda-forge,defaults
+        channel-priority: strict
+
+    - name: Install dependencies
+      shell: bash -el {0}
+      run: |
+        conda install -n base -c conda-forge \
+          librosa \
+          scikit-learn \
+          joblib \
+          numpy \
+          soundfile \
+          wget \
+          unzip
+
+    - name: Handle training data
+      shell: bash -el {0}
+      run: |
+        mkdir -p training_data
+        wget --no-check-certificate "https://drive.google.com/uc?export=download&id=1L0B8QAY5DmNs6G9rgzXGvpkQ0ZhGzCuU" -O dataset.zip
+        unzip dataset.zip -d training_data/
+        # Fix directory structure
+        mv training_data/noises training_data/noise
+        mkdir -p training_data/noise/cut
+        mv training_data/noise/* training_data/noise/cut/ || true
+
+    - name: Execute training
+      shell: bash -el {0}
+      run: |
+        python train_model.py
+
+    - name: Archive model
+      uses: actions/upload-artifact@v3
+      with:
+        name: wooden-model-py${{ matrix.python-version }}
+        path: wooden_hit_model.pkl
