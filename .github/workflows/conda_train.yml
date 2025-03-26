@@ -19,6 +19,23 @@ jobs:
         with:
           python-version: '3.11'
 
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y \
+            libsndfile1 \
+            portaudio19-dev \
+            wget \
+            unzip
+
+      - name: Cache pip dependencies
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
       - name: Install Python packages
         run: |
           python -m pip install --upgrade pip
@@ -51,7 +68,6 @@ jobs:
         run: |
           # Get latest release tag; start at v1.0 if none exists
           LATEST_TAG=$(gh release list --exclude-drafts --exclude-pre-releases --limit 1 --json tagName --jq '.[0].tagName')
-          
           if [ -z "$LATEST_TAG" ]; then
             echo "NEW_VERSION=v1.0" >> $GITHUB_OUTPUT
           else
