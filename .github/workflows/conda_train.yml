@@ -9,70 +9,57 @@ jobs:
   train-and-release:
     runs-on: ubuntu-latest
     permissions:
-      contents: write  # Required for creating releases
+      contents: write
 
     steps:
-    - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-    - name: Set up Python 3.11
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.11'
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
 
-    - name: Install system dependencies
-      run: |
-        sudo apt-get update -y
-        sudo apt-get install -y \
-          libsndfile1 \
-          portaudio19-dev \
-          wget \
-          unzip
+      - name: Install Python packages
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
 
-    - name: Install Python packages
-      run: |
-        python -m pip install --upgrade pip
-        pip install -r requirements.txt
+      - name: Download and prepare data
+        run: |
+          mkdir -p training_data
+          wget --no-check-certificate "https://drive.google.com/uc?export=download&id=1L0B8QAY5DmNs6G9rgzXGvpkQ0ZhGzCuU" -O dataset.zip
+          unzip dataset.zip -d training_data/
+          mv training_data/noises training_data/noise
+          mkdir -p training_data/noise/cut
+          mv training_data/noise/* training_data/noise/cut/ || true
 
-    - name: Download and prepare data
-      run: |
-        mkdir -p training_data
-        wget --no-check-certificate "https://drive.google.com/uc?export=download&id=1L0B8QAY5DmNs6G9rgzXGvpkQ0ZhGzCuU" -O dataset.zip
-        unzip dataset.zip -d training_data/
-        mv training_data/noises training_data/noise
-        mkdir -p training_data/noise/cut
-        mv training_data/noise/* training_data/noise/cut/ || true
+      - name: Run training
+        run: python train_model.py
 
-    - name: Run training
-      run: python train_model.py
+      - name: Install GitHub CLI
+        uses: cli/cli-action@v2
 
-    - name: Install GitHub CLI
-      uses: cli/cli-action@v2  # Updated action
-
-    - name: Determine next version
-      id: version
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      run: |
-        # Get latest release tag or start at v1.0
-        LATEST_TAG=$(gh release list --exclude-drafts --exclude-pre-releases --limit 1 --json tagName --jq '.[0].tagName')
-        
-        if [ -z "$LATEST_TAG" ]; then
-          echo "NEW_VERSION=v1.0" >> $GITHUB_OUTPUT
-        else
-          # Extract major and minor version numbers
-          MAJOR=$(echo "$LATEST_TAG" | awk -F'[v.]' '{print $2}')
-          MINOR=$(echo "$LATEST_TAG" | awk -F'[v.]' '{print $3}')
+      - name: Determine next version
+        id: version
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          LATEST_TAG=$(gh release list --exclude-drafts --exclude-pre-releases --limit 1 --json tagName --jq '.[0].tagName')
           
-          # Increment minor version
-          NEW_MINOR=$((MINOR + 1))
-          echo "NEW_VERSION=v${MAJOR}.${NEW_MINOR}" >> $GITHUB_OUTPUT
-        fi
+          if [ -z "$LATEST_TAG" ]; then
+            echo "NEW_VERSION=v1.0" >> $GITHUB_OUTPUT
+          else
+            MAJOR=$(echo "$LATEST_TAG" | awk -F'[v.]' '{print $2}')
+            MINOR=$(echo "$LATEST_TAG" | awk -F'[v.]' '{print $3}')
+            NEW_MINOR=$((MINOR + 1))
+            echo "NEW_VERSION=v${MAJOR}.${NEW_MINOR}" >> $GITHUB_OUTPUT
+          fi
 
-    - name: Create new release
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      run: |
-        gh release create ${{ steps.version.outputs.NEW_VERSION }} \
-          --title "${{ steps.version.outputs.NEW_VERSION }}" \
-          --notes "Automated model release" \
-          wooden_hit_model.pkl
+      - name: Create new release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create ${{ steps.version.outputs.NEW_VERSION }} \
+            --title "${{ steps.version.outputs.NEW_VERSION }}" \
+            --notes "Automated model release" \
+            wooden_hit_model.pkl
