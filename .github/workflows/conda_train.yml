@@ -8,7 +8,7 @@ on:
 jobs:
   train:
     name: Train (${{ matrix.python-version }})
-    runs-on: ubuntu-latest  # Single OS for audio processing consistency
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
@@ -42,7 +42,6 @@ jobs:
         mkdir -p training_data
         wget --no-check-certificate "https://drive.google.com/uc?export=download&id=1L0B8QAY5DmNs6G9rgzXGvpkQ0ZhGzCuU" -O dataset.zip
         unzip dataset.zip -d training_data/
-        # Fix directory structure
         mv training_data/noises training_data/noise
         mkdir -p training_data/noise/cut
         mv training_data/noise/* training_data/noise/cut/ || true
@@ -53,7 +52,7 @@ jobs:
         python train_model.py
 
     - name: Archive model
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4  # Updated to v4
       with:
         name: wooden-model-py${{ matrix.python-version }}
         path: wooden_hit_model.pkl

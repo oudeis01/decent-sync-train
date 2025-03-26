@@ -1,1 +1,8 @@
-training_data
+# Ignore everything
+/*
+
+
+# include 
+!.github/
+!train_model.py
+!requirements.txt
