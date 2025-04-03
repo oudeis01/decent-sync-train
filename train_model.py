@@ -83,5 +83,20 @@ def train():
     joblib.dump(model, MODEL_PATH)
     print(f"Model saved to {MODEL_PATH}")
 
+
+    # for optimized c++ based inference in lowend rpi zero
+    with open("model_weights.txt", "w") as f:
+        # Save SVM coefficients (for linear kernel)
+        f.write(f"{model.intercept_[0]}\n")
+        for coef in model.coef_[0]:
+            f.write(f"{coef}\n")
+    
+    # Save feature standardization parameters
+    means = X_train.mean(axis=0)
+    stds = X_train.std(axis=0)
+    with open("feature_scale.txt", "w") as f:
+        for mean, std in zip(means, stds):
+            f.write(f"{mean}\n{std}\n")
+
 if __name__ == "__main__":
     train()
