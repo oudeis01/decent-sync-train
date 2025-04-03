@@ -12,10 +12,10 @@ from collections import deque
 # Configuration
 MODEL_PATH = "wooden_hit_model.pkl"
 TARGET_SAMPLE_RATE = 16000
-CHUNK = 512  # Keep aligned with buffer size
+CHUNK = 512
 N_MFCC = 10
 THRESHOLD = 0.70
-TARGET_RMS = 0.08  # Adjusted for electret mic
+TARGET_RMS = 0.08
 SMOOTHING_FACTOR = 0.15
 
 # Precomputed constants
@@ -30,15 +30,9 @@ class AudioNormalizer:
     def __init__(self):
         self.rms_history = deque(maxlen=10)
         self.current_gain = 1.0
-        self.raw_frames = []
-        self.processed_frames = []
 
     def normalize_chunk(self, data):
-        """Normalize audio chunk while preserving raw data"""
-        # Store raw audio
-        self.raw_frames.append(data)
-        
-        # Convert to float32 for processing
+        """Normalize audio chunk"""
         audio = np.frombuffer(data, dtype=np.int16).astype(np.float32) / 32767.0
         
         # Calculate RMS and update gain
@@ -50,43 +44,22 @@ class AudioNormalizer:
         
         # Apply gain and prevent clipping
         processed = np.clip(audio * self.current_gain, -1.0, 1.0)
-        
-        # Convert back to int16 and store
-        processed_bytes = (processed * 32767).astype(np.int16).tobytes()
-        self.processed_frames.append(processed_bytes)
-        
-        return processed_bytes
+        return (processed * 32767).astype(np.int16).tobytes()
 
 def process_audio(audio, original_rate):
-    """Optimized audio pipeline with normalized input"""
-    # Resample if needed
+    """Optimized audio pipeline"""
     if original_rate != TARGET_SAMPLE_RATE:
         audio = signal.resample_poly(audio, TARGET_SAMPLE_RATE, original_rate)
     
-    # Fixed-size processing with zero-padding
-    audio = np.pad(audio, (0, N_FFT - len(audio)))[:N_FFT]
+    audio = np.pad(audio, (0, max(0, N_FFT - len(audio))))[:N_FFT]
     
-    # Manual MFCC computation
     stft = np.abs(librosa.stft(audio.astype(np.float32)/32768.0, n_fft=N_FFT, hop_length=HOP_LENGTH))
     mel = np.dot(MEL_FILTERS, stft)
     mfccs = librosa.feature.mfcc(S=librosa.amplitude_to_db(mel), n_mfcc=N_MFCC)
     return np.mean(mfccs.T, axis=0)
 
-def save_recordings(normalizer, hw_rate):
-    """Save both raw and processed recordings"""
-    with wave.open("raw_recording.wav", 'wb') as wf:
-        wf.setnchannels(1)
-        wf.setsampwidth(2)
-        wf.setframerate(hw_rate)
-        wf.writeframes(b''.join(normalizer.raw_frames))
-    
-    with wave.open("processed_recording.wav", 'wb') as wf:
-        wf.setnchannels(1)
-        wf.setsampwidth(2)
-        wf.setframerate(TARGET_SAMPLE_RATE)
-        wf.writeframes(b''.join(normalizer.processed_frames))
-
 def main():
+    model = joblib.load(MODEL_PATH)
     p = pyaudio.PyAudio()
     stream = None
     normalizer = AudioNormalizer()
@@ -95,7 +68,7 @@ def main():
         device_index, hw_rate = get_audio_device()
         buffer_size = int(N_FFT * hw_rate / TARGET_SAMPLE_RATE)
         
-        print(f"Starting detection on {hw_rate/1000}kHz input with normalization...")
+        print(f"Starting detection on {hw_rate/1000}kHz input...")
         
         stream = p.open(
             format=pyaudio.paInt16,
@@ -111,11 +84,8 @@ def main():
         last_print = time.time()
         
         while True:
-            # Read and normalize audio
             raw_data = stream.read(CHUNK, exception_on_overflow=False)
             processed_data = normalizer.normalize_chunk(raw_data)
-            
-            # Process normalized audio
             new_samples = np.frombuffer(processed_data, dtype=np.int16)
             audio_buffer = np.concatenate((audio_buffer, new_samples))
             
@@ -123,7 +93,7 @@ def main():
                 chunk = audio_buffer[:buffer_size]
                 audio_buffer = audio_buffer[buffer_size:]
                 
-                features = process_audio(chunk, TARGET_SAMPLE_RATE)
+                features = process_audio(chunk, hw_rate)  # Critical fix: use hw_rate
                 prob = model.predict_proba([features])[0][1]
                 
                 if prob > THRESHOLD:
@@ -133,7 +103,6 @@ def main():
 
     except KeyboardInterrupt:
         print("\nStopping...")
-        save_recordings(normalizer, hw_rate)
     finally:
         if stream:
             stream.stop_stream()
@@ -141,7 +110,6 @@ def main():
         p.terminate()
 
 def get_audio_device():
-    """Find USB audio interface with direct ALSA access"""
     p = pyaudio.PyAudio()
     for i in range(p.get_device_count()):
         dev = p.get_device_info_by_index(i)
@@ -152,11 +120,6 @@ def get_audio_device():
     raise RuntimeError("No USB audio device found")
 
 if __name__ == "__main__":
-    # Load model first
-    model = joblib.load(MODEL_PATH)
-    
-    # Performance optimizations
     os.environ['LIBROSA_CACHE_LEVEL'] = '50'
     os.sched_setaffinity(0, {0})
-    
     main()
